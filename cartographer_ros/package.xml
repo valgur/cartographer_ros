@@ -37,7 +37,6 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <build_depend>google-mock</build_depend>
-  <build_depend>g++-static</build_depend>
   <build_depend>protobuf-dev</build_depend>
   <build_depend>python3-sphinx</build_depend>
 
