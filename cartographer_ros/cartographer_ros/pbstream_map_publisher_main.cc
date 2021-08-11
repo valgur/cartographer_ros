@@ -38,6 +38,8 @@
 #include "glog/logging.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "ros/ros.h"
+#include "nav_msgs/OccupancyGrid.h"
+#include "sensor_msgs/PointCloud2.h"
 
 DEFINE_string(pbstream_filename, "",
               "Filename of a pbstream to draw a map from.");

@@ -80,12 +80,112 @@ install(TARGETS cartographer_rosbag_validate
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
+google_binary(cartographer_kitti_trajectory_from_pbstream
+  SRCS
+  kitti_trajectory_from_pbstream.cc
+)
+
+install(TARGETS cartographer_kitti_trajectory_from_pbstream
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_read_constraints_from_pbsteam
+  SRCS
+  read_constraints_from_pbsteam.cc
+)
+
+install(TARGETS cartographer_read_constraints_from_pbsteam
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_kaist_trajectory_from_pbstream
+  SRCS
+  kaist_trajectory_from_pbstream.cc
+)
+
+install(TARGETS cartographer_kaist_trajectory_from_pbstream
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_kitti_urdf_param_caculator
+  SRCS
+  kitti_urdf_param_caculator.cc
+)
+
+install(TARGETS cartographer_kitti_urdf_param_caculator
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_dlio_eval_node
+  SRCS
+  dlio_eval_node.cc
+)
+
+install(TARGETS cartographer_dlio_eval_node
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_trajectory_info_from_pbstream
+  SRCS
+  trajectory_info_from_pbstream.cc
+)
+
+install(TARGETS cartographer_trajectory_info_from_pbstream
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_gen_ground_truth_by_ndt_match
+  SRCS
+  gen_ground_truth_by_ndt_match.cc
+)
+
+install(TARGETS cartographer_gen_ground_truth_by_ndt_match
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+
+google_binary(cartographer_pbstream_3d_map_publisher_main
+  SRCS
+  pbstream_3d_map_publisher_main.cc
+)
+
+install(TARGETS cartographer_pbstream_3d_map_publisher_main
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 google_binary(cartographer_pbstream_to_ros_map
   SRCS
     pbstream_to_ros_map_main.cc
 )
 
 install(TARGETS cartographer_pbstream_to_ros_map
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+google_binary(cartographer_pb_range_data_to_ros_cloud_main
+  SRCS
+    pb_range_data_to_ros_cloud_main.cc
+)
+
+install(TARGETS cartographer_pb_range_data_to_ros_cloud_main
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

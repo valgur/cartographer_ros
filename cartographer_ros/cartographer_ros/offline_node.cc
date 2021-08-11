@@ -50,12 +50,12 @@ DEFINE_string(
 DEFINE_string(urdf_filenames, "",
               "Comma-separated list of one or more URDF files that contain "
               "static links for the sensor configuration(s).");
-DEFINE_bool(use_bag_transforms, true,
+DEFINE_bool(use_bag_transforms, false,
             "Whether to read, use and republish transforms from bags.");
 DEFINE_string(load_state_filename, "",
               "If non-empty, filename of a .pbstream file to load, containing "
               "a saved SLAM state.");
-DEFINE_bool(load_frozen_state, true,
+DEFINE_bool(load_frozen_state, false,
             "Load the saved state as frozen (non-optimized) trajectories.");
 DEFINE_bool(keep_running, false,
             "Keep running the offline node after all messages from the bag "
@@ -63,6 +63,12 @@ DEFINE_bool(keep_running, false,
 DEFINE_double(skip_seconds, 0,
               "Optional amount of seconds to skip from the beginning "
               "(i.e. when the earliest bag starts.). ");
+DEFINE_bool(save_pbstream, false,
+              "Whether to save trajectory states to pbstream file.");
+DEFINE_bool(save_range_data, false,
+              "Whether to save trajectory range data to pbstream file.");
+DEFINE_string(
+    save_traj_nodes_filename, "", "If non-empty, serialize nodes for dlio experiment.");
 
 namespace cartographer_ros {
 
@@ -131,6 +137,9 @@ void RunOfflineNode(const MapBuilderFactory& map_builder_factory) {
   tf_buffer.setUsingDedicatedThread(true);
 
   Node node(node_options, std::move(map_builder), &tf_buffer);
+  if(!FLAGS_save_traj_nodes_filename.empty()){
+    node.save_traj_filename_dlio_ = FLAGS_save_traj_nodes_filename;
+  }
   if (!FLAGS_load_state_filename.empty()) {
     node.LoadState(FLAGS_load_state_filename, FLAGS_load_frozen_state);
   }
@@ -186,9 +195,12 @@ void RunOfflineNode(const MapBuilderFactory& map_builder_factory) {
     }
     for (const auto& expected_sensor_id :
          bag_expected_sensor_ids.at(current_bag_index)) {
+      //TODO(wz): resolveName does not work when there are multiple IMU topics.
       const auto bag_resolved_topic = std::make_pair(
           static_cast<int>(current_bag_index),
-          node.node_handle()->resolveName(expected_sensor_id.id));
+          ros::names::resolve(expected_sensor_id.id, true)
+          /* node.node_handle()->resolveName(expected_sensor_id.id, true) */);
+      LOG(INFO) << expected_sensor_id.id << "," <<bag_resolved_topic.second;
       if (bag_topic_to_sensor_id.count(bag_resolved_topic) != 0) {
         LOG(ERROR) << "Sensor " << expected_sensor_id.id << " of bag "
                    << current_bag_index << " resolves to topic "
@@ -196,9 +208,8 @@ void RunOfflineNode(const MapBuilderFactory& map_builder_factory) {
                    << " sensor "
                    << bag_topic_to_sensor_id.at(bag_resolved_topic).id;
       }
-      bag_topic_to_sensor_id[bag_resolved_topic] = expected_sensor_id;
+      bag_topic_to_sensor_id[bag_resolved_topic] = expected_sensor_id;      
     }
-
     playable_bag_multiplexer.AddPlayableBag(PlayableBag(
         bag_filename, current_bag_index, ros::TIME_MIN, ros::TIME_MAX, kDelay,
         // PlayableBag::FilteringEarlyMessageHandler is used to get an early
@@ -277,6 +288,7 @@ void RunOfflineNode(const MapBuilderFactory& map_builder_factory) {
         bag_index,
         node.node_handle()->resolveName(msg.getTopic(), false /* resolve */));
     auto it = bag_topic_to_sensor_id.find(bag_topic);
+    
     if (it != bag_topic_to_sensor_id.end()) {
       const std::string& sensor_id = it->second.id;
       if (msg.isType<sensor_msgs::LaserScan>()) {
@@ -343,16 +355,24 @@ void RunOfflineNode(const MapBuilderFactory& map_builder_factory) {
   LOG(INFO) << "Peak memory usage: " << usage.ru_maxrss << " KiB";
 #endif
 
-  if (::ros::ok() && bag_filenames.size() > 0) {
+  if (::ros::ok() && bag_filenames.size() > 0 && FLAGS_save_pbstream) {
     const std::string output_filename = bag_filenames.front();
     const std::string suffix = ".pbstream";
     const std::string state_output_filename = output_filename + suffix;
     LOG(INFO) << "Writing state to '" << state_output_filename << "'...";
     node.SerializeState(state_output_filename);
   }
-  if (FLAGS_keep_running) {
-    ::ros::waitForShutdown();
+  if (::ros::ok() && bag_filenames.size() > 0 && FLAGS_save_range_data) {
+    const std::string output_filename = bag_filenames.front();
+    const std::string suffix = ".pbstream";
+    const std::string range_data_output_filename 
+      = output_filename + "-range-data"+suffix;
+    LOG(INFO) << "Writing range data to '" << range_data_output_filename << "'...";
+    node.SerializeRangedata(range_data_output_filename);
   }
+  // if (FLAGS_keep_running) {
+  //   ::ros::waitForShutdown();
+  // }
 }
 
 }  // namespace cartographer_ros

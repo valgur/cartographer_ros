@@ -95,6 +95,9 @@ Node::Node(
   trajectory_node_list_publisher_ =
       node_handle_.advertise<::visualization_msgs::MarkerArray>(
           kTrajectoryNodeListTopic, kLatestOnlyPublisherQueueSize);
+  trajectory_publisher_ =
+      node_handle_.advertise<::nav_msgs::Path>(
+          kGlobalPathTopic, kLatestOnlyPublisherQueueSize);
   landmark_poses_list_publisher_ =
       node_handle_.advertise<::visualization_msgs::MarkerArray>(
           kLandmarkPosesListTopic, kLatestOnlyPublisherQueueSize);
@@ -113,6 +116,9 @@ Node::Node(
   scan_matched_point_cloud_publisher_ =
       node_handle_.advertise<sensor_msgs::PointCloud2>(
           kScanMatchedPointCloudTopic, kLatestOnlyPublisherQueueSize);
+  full_map_publisher_ =
+      node_handle_.advertise<sensor_msgs::PointCloud2>(
+          kFullOptimizedPointCloudTopic, kLatestOnlyPublisherQueueSize);
 
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(node_options_.submap_publish_period_sec),
@@ -129,9 +135,17 @@ Node::Node(
   wall_timers_.push_back(node_handle_.createWallTimer(
       ::ros::WallDuration(kConstraintPublishPeriodSec),
       &Node::PublishConstraintList, this));
+  if(node_options_.full_map_cloud_publish_period_sec > 0){
+    map_builder_bridge_.EnableFullCloudCache();
+    // wall_timers_.push_back(node_handle_.createWallTimer(
+    //   ::ros::WallDuration(node_options_.full_map_cloud_publish_period_sec),
+    //   &Node::PublishFullMapCloud, this));
+  }
 }
 
-Node::~Node() { FinishAllTrajectories(); }
+Node::~Node() { 
+  FinishAllTrajectories(); 
+}
 
 ::ros::NodeHandle* Node::node_handle() { return &node_handle_; }
 
@@ -220,11 +234,14 @@ void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
     const Rigid3d tracking_to_local = [&] {
       if (trajectory_state.trajectory_options.publish_frame_projected_to_2d) {
         return carto::transform::Embed3D(
-            carto::transform::Project2D(extrapolator.ExtrapolatePose(now)));
+            // carto::transform::Project2D(extrapolator.ExtrapolatePose(now)));
+          carto::transform::Project2D(
+            trajectory_state.local_slam_data->local_pose));
       }
-      return extrapolator.ExtrapolatePose(now);
+      // return extrapolator.ExtrapolatePose(now);
+        return trajectory_state.local_slam_data->local_pose;
     }();
-
+    
     const Rigid3d tracking_to_map =
         trajectory_state.local_to_map * tracking_to_local;
 
@@ -262,11 +279,17 @@ void Node::PublishTrajectoryStates(const ::ros::WallTimerEvent& timer_event) {
 
 void Node::PublishTrajectoryNodeList(
     const ::ros::WallTimerEvent& unused_timer_event) {
-  if (trajectory_node_list_publisher_.getNumSubscribers() > 0) {
+  // if (trajectory_node_list_publisher_.getNumSubscribers() > 0) {
+  //   carto::common::MutexLocker lock(&mutex_);
+  //   trajectory_node_list_publisher_.publish(
+  //       map_builder_bridge_.GetTrajectoryNodeList());
+  // }
+  if (trajectory_publisher_.getNumSubscribers() > 0) {
     carto::common::MutexLocker lock(&mutex_);
-    trajectory_node_list_publisher_.publish(
-        map_builder_bridge_.GetTrajectoryNodeList());
+    auto traj = map_builder_bridge_.GetTrajectory();
+    trajectory_publisher_.publish(traj);
   }
+  
 }
 
 void Node::PublishLandmarkPosesList(
@@ -284,6 +307,50 @@ void Node::PublishConstraintList(
     carto::common::MutexLocker lock(&mutex_);
     constraint_list_publisher_.publish(map_builder_bridge_.GetConstraintList());
   }
+}
+
+bool Node::OptimizeUpdated(const carto::transform::Rigid3f& cur_local_to_map){
+  // just a simple strategy
+  return (cur_local_to_map.translation() 
+    - last_local_to_map_.translation()).norm() > 0.5;
+}
+
+void Node::PublishFullMapCloud(const ::ros::WallTimerEvent& unused_timer_event){
+ 
+  // if (full_map_publisher_.getNumSubscribers() > 0) {
+  // currently, only the first trajectory is published.
+  int trajectory_id = 0;
+  ros::Rate r(100);
+  carto::transform::Rigid3f local_to_map;
+  for (const auto& entry : map_builder_bridge_.GetTrajectoryStates()) {
+    const auto& optimized_trajectory_state = entry.second;
+    local_to_map = optimized_trajectory_state.local_to_map.cast<float>();
+    if(entry.first == trajectory_id) break;
+  }
+  if(!OptimizeUpdated(local_to_map)) return;
+  last_local_to_map_ = local_to_map;
+
+  const auto& cached_clouds = map_builder_bridge_.GetCachedCloud();
+  for(const auto& traj_states : cached_clouds){
+    for(const auto& local_slam_data : traj_states.second){
+      carto::sensor::TimedPointCloud point_cloud;
+      point_cloud.reserve(local_slam_data.range_data_in_local.returns.size());
+      for (const Eigen::Vector3f point : 
+        local_slam_data.range_data_in_local.returns) {
+        Eigen::Vector4f point_time;
+        point_time << point, 0.f;
+        point_cloud.push_back(point_time);
+      }
+      auto cloud_msg = ToPointCloud2Message(
+        carto::common::ToUniversal(local_slam_data.time),
+        node_options_.map_frame,
+        carto::sensor::TransformTimedPointCloud(point_cloud, local_to_map));
+      cloud_msg.header.stamp = ros::Time::now();
+      full_map_publisher_.publish(cloud_msg);
+      r.sleep();
+    }
+  }
+  // }
 }
 
 std::set<cartographer::mapping::TrajectoryBuilderInterface::SensorId>
@@ -383,6 +450,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
       (node_options_.map_builder_options.use_trajectory_builder_2d() &&
        options.trajectory_builder_options.trajectory_builder_2d_options()
            .use_imu_data())) {
+    
     std::string topic = topics.imu_topic;
     subscribers_[trajectory_id].push_back(
         {SubscribeWithHandler<sensor_msgs::Imu>(&Node::HandleImuMessage,
@@ -603,6 +671,9 @@ void Node::RunFinalOptimization() {
   // Assuming we are not adding new data anymore, the final optimization
   // can be performed without holding the mutex.
   map_builder_bridge_.RunFinalOptimization();
+  if(!save_traj_filename_dlio_.empty()){
+    map_builder_bridge_.WriteTrajectoryForDLIO(save_traj_filename_dlio_);
+  }
 }
 
 void Node::HandleOdometryMessage(const int trajectory_id,
@@ -687,12 +758,24 @@ void Node::HandlePointCloud2Message(
     return;
   }
   map_builder_bridge_.sensor_bridge(trajectory_id)
-      ->HandlePointCloud2Message(sensor_id, msg);
+      ->HandlePointCloud2Message(sensor_id, msg, node_options_.sensor_type);
 }
 
 void Node::SerializeState(const std::string& filename) {
   carto::common::MutexLocker lock(&mutex_);
   CHECK(map_builder_bridge_.SerializeState(filename))
+      << "Could not write state.";
+}
+
+void Node::SerializeRangedata(const std::string& filename) {
+  carto::common::MutexLocker lock(&mutex_);
+  CHECK(map_builder_bridge_.SerializeRangeData(filename))
+      << "Could not write range data.";
+}
+
+void Node::SerializeTrajForDLIOTest(const std::string& filename) {
+  carto::common::MutexLocker lock(&mutex_);
+  CHECK(map_builder_bridge_.WriteTrajectoryForDLIO(filename))
       << "Could not write state.";
 }
 

@@ -110,12 +110,13 @@ class Node {
 
   // Serializes the complete Node state.
   void SerializeState(const std::string& filename);
-
+  void SerializeRangedata(const std::string& filename);
+  void SerializeTrajForDLIOTest(const std::string& filename);
   // Loads a serialized SLAM state from a .pbstream file.
   void LoadState(const std::string& state_filename, bool load_frozen_state);
 
   ::ros::NodeHandle* node_handle();
-
+  std::string save_traj_filename_dlio_ = "";
  private:
   struct Subscriber {
     ::ros::Subscriber subscriber;
@@ -156,10 +157,12 @@ class Node {
   void PublishTrajectoryNodeList(const ::ros::WallTimerEvent& timer_event);
   void PublishLandmarkPosesList(const ::ros::WallTimerEvent& timer_event);
   void PublishConstraintList(const ::ros::WallTimerEvent& timer_event);
+  void PublishFullMapCloud(const ::ros::WallTimerEvent& timer_event);
   void SpinOccupancyGridThreadForever();
   bool ValidateTrajectoryOptions(const TrajectoryOptions& options);
   bool ValidateTopicNames(const ::cartographer_ros_msgs::SensorTopics& topics,
                           const TrajectoryOptions& options);
+  bool OptimizeUpdated(const cartographer::transform::Rigid3f& cur_local_to_map);
   cartographer_ros_msgs::StatusResponse FinishTrajectoryUnderLock(
       int trajectory_id) REQUIRES(mutex_);
 
@@ -175,6 +178,10 @@ class Node {
   ::ros::Publisher trajectory_node_list_publisher_;
   ::ros::Publisher landmark_poses_list_publisher_;
   ::ros::Publisher constraint_list_publisher_;
+  //wz add
+  ::ros::Publisher trajectory_publisher_;
+  ::ros::Publisher full_map_publisher_;
+  cartographer::transform::Rigid3f last_local_to_map_;
   // These ros::ServiceServers need to live for the lifetime of the node.
   std::vector<::ros::ServiceServer> service_servers_;
   ::ros::Publisher scan_matched_point_cloud_publisher_;

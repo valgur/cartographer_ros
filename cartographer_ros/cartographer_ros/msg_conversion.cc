@@ -38,6 +38,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/MultiEchoLaserScan.h"
 #include "sensor_msgs/PointCloud2.h"
+#include "cartographer_ros/sensor_bridge.h"
 
 namespace cartographer_ros {
 namespace {
@@ -207,6 +208,23 @@ ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& message) {
   }
   return std::make_tuple(point_cloud, FromRos(message.header.stamp));
 }
+
+std::tuple<::cartographer::sensor::PointCloudWithIntensities,
+           ::cartographer::common::Time>
+ToPointCloudWithIntensitiesRsLiDAR(const sensor_msgs::PointCloud2& message) {
+  PointCloudWithIntensities point_cloud;
+  // We check for intensity field here to avoid run-time warnings if we pass in
+  // a PointCloud2 without intensity.
+  
+  pcl::PointCloud<RsPointXYZIRT> pcl_point_cloud;
+  pcl::fromROSMsg(message, pcl_point_cloud);
+  for (const auto& point : pcl_point_cloud.points) {
+    point_cloud.points.emplace_back(point.x, point.y, point.z, 0.f);
+    point_cloud.intensities.push_back(point.intensity);
+  }
+  return std::make_tuple(point_cloud, FromRos(message.header.stamp));
+}
+
 
 LandmarkData ToLandmarkData(const LandmarkList& landmark_list) {
   LandmarkData landmark_data;

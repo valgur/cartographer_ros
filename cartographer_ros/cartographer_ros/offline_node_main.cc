@@ -38,5 +38,5 @@ int main(int argc, char** argv) {
 
   cartographer_ros::RunOfflineNode(map_builder_factory);
 
-  ::ros::shutdown();
+  // ::ros::shutdown();
 }

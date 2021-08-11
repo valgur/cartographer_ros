@@ -32,6 +32,7 @@ NodeOptions CreateNodeOptions(
       ::cartographer::mapping::CreateMapBuilderOptions(
           lua_parameter_dictionary->GetDictionary("map_builder").get());
   options.map_frame = lua_parameter_dictionary->GetString("map_frame");
+  options.sensor_type = lua_parameter_dictionary->GetString("sensor_type");
   options.lookup_transform_timeout_sec =
       lua_parameter_dictionary->GetDouble("lookup_transform_timeout_sec");
   options.submap_publish_period_sec =
@@ -40,6 +41,8 @@ NodeOptions CreateNodeOptions(
       lua_parameter_dictionary->GetDouble("pose_publish_period_sec");
   options.trajectory_publish_period_sec =
       lua_parameter_dictionary->GetDouble("trajectory_publish_period_sec");
+  options.full_map_cloud_publish_period_sec =
+      lua_parameter_dictionary->GetDouble("full_map_cloud_publish_period_sec");
   return options;
 }
 

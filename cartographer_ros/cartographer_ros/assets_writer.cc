@@ -36,6 +36,7 @@
 #include "cartographer_ros/msg_conversion.h"
 #include "cartographer_ros/ros_map_writing_points_processor.h"
 #include "cartographer_ros/split_string.h"
+#include "cartographer_ros/sensor_bridge.h"
 #include "cartographer_ros/time_conversion.h"
 #include "cartographer_ros/urdf_reader.h"
 #include "gflags/gflags.h"
@@ -49,11 +50,35 @@
 #include "tf2_ros/buffer.h"
 #include "urdf/model.h"
 
+
 namespace cartographer_ros {
 namespace {
 
 constexpr char kTfStaticTopic[] = "/tf_static";
 namespace carto = ::cartographer;
+
+namespace {
+
+
+std::string CheckNoLeadingSlash(const std::string& frame_id) {
+  std::string frame_id_out = frame_id;
+  if (frame_id.size() > 0) {
+    if(frame_id[0] == '/'){
+      // LOG(WARNING)<< "The frame_id " << frame_id
+      //             << " should not start with a /. See 1.7 in "
+      //                 "http://wiki.ros.org/tf2/Migration.";
+      if(frame_id.size() > 1){
+        frame_id_out = frame_id.substr(1);
+      }else{
+        LOG(ERROR)<< "The frame_id " << frame_id
+                  << " should not start with a /. See 1.7 in "
+                      "http://wiki.ros.org/tf2/Migration.";
+      }
+    } 
+  }
+  return frame_id_out;
+}
+}  // namespace
 
 std::unique_ptr<carto::io::PointsProcessorPipelineBuilder>
 CreatePipelineBuilder(
@@ -106,7 +131,7 @@ std::unique_ptr<carto::io::PointsBatch> HandleMessage(
   carto::sensor::PointCloudWithIntensities point_cloud;
   carto::common::Time point_cloud_time;
   std::tie(point_cloud, point_cloud_time) =
-      ToPointCloudWithIntensities(message);
+      ToPointCloudWithIntensitiesRsLiDAR(message);
   CHECK_EQ(point_cloud.intensities.size(), point_cloud.points.size());
 
   for (size_t i = 0; i < point_cloud.points.size(); ++i) {
@@ -119,7 +144,7 @@ std::unique_ptr<carto::io::PointsBatch> HandleMessage(
         transform_interpolation_buffer.Lookup(time);
     const carto::transform::Rigid3d sensor_to_tracking =
         ToRigid3d(tf_buffer.lookupTransform(
-            tracking_frame, message.header.frame_id, ToRos(time)));
+            tracking_frame, CheckNoLeadingSlash(message.header.frame_id), ToRos(time)));
     const carto::transform::Rigid3f sensor_to_map =
         (tracking_to_map * sensor_to_tracking).cast<float>();
     points_batch->points.push_back(sensor_to_map *
@@ -236,13 +261,15 @@ void AssetsWriter::Run(const std::string& configuration_directory,
                 tracking_frame, tf_buffer, transform_interpolation_buffer);
           } else if (delayed_message
                          .isType<sensor_msgs::MultiEchoLaserScan>()) {
-            points_batch = HandleMessage(
-                *delayed_message.instantiate<sensor_msgs::MultiEchoLaserScan>(),
-                tracking_frame, tf_buffer, transform_interpolation_buffer);
+            LOG(ERROR)<<"not support now!";
+            // points_batch = HandleMessage(
+            //     *delayed_message.instantiate<sensor_msgs::MultiEchoLaserScan>(),
+            //     tracking_frame, tf_buffer, transform_interpolation_buffer);
           } else if (delayed_message.isType<sensor_msgs::LaserScan>()) {
-            points_batch = HandleMessage(
-                *delayed_message.instantiate<sensor_msgs::LaserScan>(),
-                tracking_frame, tf_buffer, transform_interpolation_buffer);
+            LOG(ERROR)<<"not support now!";
+            // points_batch = HandleMessage(
+            //     *delayed_message.instantiate<sensor_msgs::LaserScan>(),
+            //     tracking_frame, tf_buffer, transform_interpolation_buffer);
           }
           if (points_batch != nullptr) {
             points_batch->trajectory_id = trajectory_id;

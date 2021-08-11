@@ -34,6 +34,7 @@
 #include "cartographer_ros_msgs/SubmapList.h"
 #include "cartographer_ros_msgs/SubmapQuery.h"
 #include "nav_msgs/OccupancyGrid.h"
+#include "nav_msgs/Path.h"
 #include "visualization_msgs/MarkerArray.h"
 
 namespace cartographer_ros {
@@ -72,21 +73,33 @@ class MapBuilderBridge {
   void FinishTrajectory(int trajectory_id);
   void RunFinalOptimization();
   bool SerializeState(const std::string& filename);
+  bool SerializeRangeData(const std::string& filename);
 
   void HandleSubmapQuery(
       cartographer_ros_msgs::SubmapQuery::Request& request,
       cartographer_ros_msgs::SubmapQuery::Response& response);
 
   std::set<int> GetFrozenTrajectoryIds();
+  
   cartographer_ros_msgs::SubmapList GetSubmapList();
   std::unordered_map<int, TrajectoryState> GetTrajectoryStates()
       EXCLUDES(mutex_);
   visualization_msgs::MarkerArray GetTrajectoryNodeList();
+  // wz added, for debugging
+  nav_msgs::Path GetTrajectory();
+  bool WriteTrajectoryForDLIO(const std::string& save_file_path);
   visualization_msgs::MarkerArray GetLandmarkPosesList();
   visualization_msgs::MarkerArray GetConstraintList();
 
   SensorBridge* sensor_bridge(int trajectory_id);
-
+  void EnableFullCloudCache(){cache_data_for_visualize_ = true;}
+  const std::unordered_map<
+    int, std::vector<TrajectoryState::LocalSlamData>>& GetCachedCloud() const{
+    return range_data_local_all_;
+  }
+  cartographer::transform::Rigid3d GetLocalToGlobal(int trajectory_id){
+    return map_builder_->pose_graph()->GetLocalToGlobalTransform(trajectory_id);
+  }
  private:
   void OnLocalSlamResult(
       const int trajectory_id, const ::cartographer::common::Time time,
@@ -109,6 +122,11 @@ class MapBuilderBridge {
   std::unordered_map<int, TrajectoryOptions> trajectory_options_;
   std::unordered_map<int, std::unique_ptr<SensorBridge>> sensor_bridges_;
   std::unordered_map<int, size_t> trajectory_to_highest_marker_id_;
+  
+  // To visualize, optional (wz)
+  bool cache_data_for_visualize_ = false;
+  std::unordered_map<int, 
+    std::vector<TrajectoryState::LocalSlamData>> range_data_local_all_;
 };
 
 }  // namespace cartographer_ros

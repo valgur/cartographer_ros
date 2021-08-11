@@ -37,7 +37,74 @@
 #include "sensor_msgs/NavSatFix.h"
 #include "sensor_msgs/PointCloud2.h"
 
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/search/impl/search.hpp>
+#include <pcl/range_image/range_image.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/common/common.h>
+#include <pcl/common/transforms.h>
+#include <pcl/registration/icp.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/filters/filter.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/crop_box.h> 
+#include <pcl_conversions/pcl_conversions.h>
+
+struct VelodynePointXYZIRT
+{
+    PCL_ADD_POINT4D
+    PCL_ADD_INTENSITY;
+    uint16_t ring;
+    float time;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
+    (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
+    (uint16_t, ring, ring) (float, time, time)
+);
+using PointXYZIRT = VelodynePointXYZIRT;
+
+struct OusterPointXYZIRT {
+    PCL_ADD_POINT4D;
+    float intensity;
+    uint32_t t;
+    uint16_t reflectivity;
+    uint8_t ring;
+    uint16_t noise;
+    uint32_t range;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT(OusterPointXYZIRT,
+    (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
+    (uint32_t, t, t) (uint16_t, reflectivity, reflectivity)
+    (uint8_t, ring, ring) (uint16_t, noise, noise) (uint32_t, range, range)
+)
+
+struct RsPointXYZIRT
+{
+  PCL_ADD_POINT4D;
+  uint8_t intensity;
+  uint16_t ring = 0;
+  double timestamp = 0;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT(RsPointXYZIRT, 
+  (float, x, x)(float, y, y)(float, z, z)(uint8_t, intensity, intensity)
+  (uint16_t, ring, ring)(double, timestamp, timestamp))
+
+
 namespace cartographer_ros {
+
+template<class T>
+bool isnan(const T& point){
+  return std::isnan(point.x) || std::isnan(point.y) || std::isnan(point.z);
+}
+template<class T>
+bool isinf(const T& point){
+  return std::isinf(point.x) || std::isinf(point.y) || std::isinf(point.z);
+}
 
 // Converts ROS messages into SensorData in tracking frame for the MapBuilder.
 class SensorBridge {
@@ -70,7 +137,8 @@ class SensorBridge {
       const std::string& sensor_id,
       const sensor_msgs::MultiEchoLaserScan::ConstPtr& msg);
   void HandlePointCloud2Message(const std::string& sensor_id,
-                                const sensor_msgs::PointCloud2::ConstPtr& msg);
+                                const sensor_msgs::PointCloud2::ConstPtr& msg,
+                                const std::string& sensor_type);
 
   const TfBridge& tf_bridge() const;
 

@@ -65,6 +65,10 @@ std::tuple<::cartographer::sensor::PointCloudWithIntensities,
            ::cartographer::common::Time>
 ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& message);
 
+std::tuple<::cartographer::sensor::PointCloudWithIntensities,
+           ::cartographer::common::Time>
+ToPointCloudWithIntensitiesRsLiDAR(const sensor_msgs::PointCloud2& message);
+
 ::cartographer::sensor::LandmarkData ToLandmarkData(
     const cartographer_ros_msgs::LandmarkList& landmark_list);
 

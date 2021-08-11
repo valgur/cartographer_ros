@@ -20,6 +20,7 @@
 #include "cartographer_ros/msg_conversion.h"
 #include "cartographer_ros/time_conversion.h"
 
+
 namespace cartographer_ros {
 
 namespace carto = ::cartographer;
@@ -28,13 +29,24 @@ using carto::transform::Rigid3d;
 
 namespace {
 
-const std::string& CheckNoLeadingSlash(const std::string& frame_id) {
+
+std::string CheckNoLeadingSlash(const std::string& frame_id) {
+  std::string frame_id_out = frame_id;
   if (frame_id.size() > 0) {
-    CHECK_NE(frame_id[0], '/') << "The frame_id " << frame_id
-                               << " should not start with a /. See 1.7 in "
-                                  "http://wiki.ros.org/tf2/Migration.";
+    if(frame_id[0] == '/'){
+      // LOG(WARNING)<< "The frame_id " << frame_id
+      //             << " should not start with a /. See 1.7 in "
+      //                 "http://wiki.ros.org/tf2/Migration.";
+      if(frame_id.size() > 1){
+        frame_id_out = frame_id.substr(1);
+      }else{
+        LOG(ERROR)<< "The frame_id " << frame_id
+                  << " should not start with a /. See 1.7 in "
+                      "http://wiki.ros.org/tf2/Migration.";
+      }
+    } 
   }
-  return frame_id;
+  return frame_id_out;
 }
 
 }  // namespace
@@ -116,7 +128,6 @@ std::unique_ptr<carto::sensor::ImuData> SensorBridge::ToImuData(
          "by setting angular_velocity_covariance[0] to -1. Cartographer "
          "requires this data to work. See "
          "http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html.";
-
   const carto::common::Time time = FromRos(msg->header.stamp);
   const auto sensor_to_tracking = tf_bridge_.LookupToTracking(
       time, CheckNoLeadingSlash(msg->header.frame_id));
@@ -164,15 +175,68 @@ void SensorBridge::HandleMultiEchoLaserScanMessage(
 
 void SensorBridge::HandlePointCloud2Message(
     const std::string& sensor_id,
-    const sensor_msgs::PointCloud2::ConstPtr& msg) {
-  pcl::PointCloud<pcl::PointXYZ> pcl_point_cloud;
-  pcl::fromROSMsg(*msg, pcl_point_cloud);
+    const sensor_msgs::PointCloud2::ConstPtr& msg,
+    const std::string& sensor_type) {
   carto::sensor::TimedPointCloud point_cloud;
-  for (const auto& point : pcl_point_cloud) {
-    point_cloud.emplace_back(point.x, point.y, point.z, 0.f);
+  double rel_time_last = 0.;
+  carto::common::Time point_cloud_stamp;
+  if(sensor_type == "ouster"){
+    pcl::PointCloud<OusterPointXYZIRT> pcl_point_cloud;
+    pcl::fromROSMsg(*msg, pcl_point_cloud);
+   
+    rel_time_last = pcl_point_cloud.points.back().t * 1e-9f;
+    for (const auto& point : pcl_point_cloud.points) {
+      if(isnan(point) || isinf(point)) continue;
+      point_cloud.emplace_back(
+        point.x, point.y, point.z, point.t * 1e-9f - rel_time_last);
+    }
+    point_cloud_stamp = FromRos(msg->header.stamp) + 
+      carto::common::FromSeconds(rel_time_last);
+  }else if(sensor_type == "velodyne"){
+    pcl::PointCloud<PointXYZIRT> pcl_point_cloud;
+    pcl::fromROSMsg(*msg, pcl_point_cloud);
+    
+    //注意：Velodyne ROS消息的stamp记录的是第一个点的采集时间，
+    //而carto里面的TimedPointCloud中每一个元素的最后一维记录的是相对最后一个点的采集时间
+    rel_time_last = pcl_point_cloud.points.back().time;
+    for (const auto& point : pcl_point_cloud.points) {
+      if(isnan(point) || isinf(point)) continue;
+      point_cloud.emplace_back(
+        point.x, point.y, point.z, point.time - rel_time_last);
+    }
+    point_cloud_stamp = FromRos(msg->header.stamp) + 
+      carto::common::FromSeconds(rel_time_last);
+  }else if(sensor_type == "robosense"){
+    pcl::PointCloud<RsPointXYZIRT> pcl_point_cloud;
+    pcl::fromROSMsg(*msg, pcl_point_cloud);
+    double st = msg->header.stamp.toSec();
+    rel_time_last = pcl_point_cloud.points.back().timestamp;
+    // double rel_time_first = pcl_point_cloud.points.front().timestamp;
+    // LOG(INFO) << "Stamp - end: "<< st - rel_time_last;
+    // LOG(INFO) << "Stamp - start:"<< st - rel_time_first;
+    
+    //carto里面的TimedPointCloud中每一个元素的最后一维记录的是相对最后一个点的采集时间
+    for (const auto& point : pcl_point_cloud.points) {
+      if(isnan(point) || isinf(point)) continue;
+      point_cloud.emplace_back(
+        point.x, point.y, point.z, point.timestamp - rel_time_last);
+    }
+    //注意：Robosense ROS消息的stamp记录的是最后点的采集时间...
+    point_cloud_stamp = FromRos(msg->header.stamp);
+  }else{
+    pcl::PointCloud<pcl::PointXYZI> pcl_point_cloud;
+    pcl::fromROSMsg(*msg, pcl_point_cloud);
+        
+    for (const auto& point : pcl_point_cloud.points) {
+      if(isnan(point) || isinf(point)) continue;
+      point_cloud.emplace_back(point.x, point.y, point.z, 0.f);
+    }
+    point_cloud_stamp = FromRos(msg->header.stamp);
   }
-  HandleRangefinder(sensor_id, FromRos(msg->header.stamp), msg->header.frame_id,
-                    point_cloud);
+  
+  //wz: 这里的时间改为最后一个点的时间戳
+  HandleRangefinder(
+    sensor_id, point_cloud_stamp, msg->header.frame_id, point_cloud);
 }
 
 const TfBridge& SensorBridge::tf_bridge() const { return tf_bridge_; }
@@ -218,12 +282,13 @@ void SensorBridge::HandleLaserScan(
     HandleRangefinder(sensor_id, subdivision_time, frame_id, subdivision);
   }
 }
-
+//在这里把传感器数据统一到了一个坐标系下了
 void SensorBridge::HandleRangefinder(
     const std::string& sensor_id, const carto::common::Time time,
     const std::string& frame_id, const carto::sensor::TimedPointCloud& ranges) {
   const auto sensor_to_tracking =
       tf_bridge_.LookupToTracking(time, CheckNoLeadingSlash(frame_id));
+  // LOG(INFO)<<sensor_to_tracking->inverse();
   if (sensor_to_tracking != nullptr) {
     trajectory_builder_->AddSensorData(
         sensor_id, carto::sensor::TimedPointCloudData{

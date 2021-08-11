@@ -39,6 +39,11 @@ DEFINE_bool(
 DEFINE_string(
     save_state_filename, "",
     "If non-empty, serialize state and write it to disk before shutting down.");
+DEFINE_string(save_range_data_name, "",
+              "Whether to save trajectory range data to pbstream file.");
+DEFINE_string(
+    save_traj_nodes_filename, "",
+    "If non-empty, serialize nodes for dlio experiment.");
 
 namespace cartographer_ros {
 namespace {
@@ -59,6 +64,10 @@ void Run() {
   if (!FLAGS_load_state_filename.empty()) {
     node.LoadState(FLAGS_load_state_filename, FLAGS_load_frozen_state);
   }
+  //for auto saving when rosbag finishes.
+  if (!FLAGS_save_traj_nodes_filename.empty()) {
+    node.save_traj_filename_dlio_ = FLAGS_save_traj_nodes_filename;
+  }
 
   if (FLAGS_start_trajectory_with_default_topics) {
     node.StartTrajectoryWithDefaultTopics(trajectory_options);
@@ -71,6 +80,12 @@ void Run() {
 
   if (!FLAGS_save_state_filename.empty()) {
     node.SerializeState(FLAGS_save_state_filename);
+  }
+  if (!FLAGS_save_range_data_name.empty()) {
+    node.SerializeRangedata(FLAGS_save_range_data_name);
+  }
+  if (!FLAGS_save_traj_nodes_filename.empty()) {
+    node.SerializeTrajForDLIOTest(FLAGS_save_traj_nodes_filename);
   }
 }
 

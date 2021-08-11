@@ -32,7 +32,7 @@ std::unique_ptr<::cartographer::transform::Rigid3d> TfBridge::LookupToTracking(
     const ::cartographer::common::Time time,
     const std::string& frame_id) const {
   ::ros::Duration timeout(lookup_transform_timeout_sec_);
-  std::unique_ptr<::cartographer::transform::Rigid3d> frame_id_to_tracking;
+  // std::unique_ptr<::cartographer::transform::Rigid3d> frame_id_to_tracking;
   try {
     const ::ros::Time latest_tf_time =
         buffer_

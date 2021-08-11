@@ -50,8 +50,9 @@ find_package(LuaGoogle REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system iostreams)
-
+find_package(VTK REQUIRED)
 find_package(urdfdom_headers REQUIRED)
+
 if(DEFINED urdfdom_headers_VERSION)
   if(${urdfdom_headers_VERSION} GREATER 0.4.1)
     add_definitions(-DURDFDOM_HEADERS_HAS_SHARED_PTR_DEFS)
@@ -100,7 +101,8 @@ target_link_libraries(${PROJECT_NAME} PUBLIC cartographer)
 
 # Lua
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC ${LUA_INCLUDE_DIR})
-
+# VTK
+target_link_libraries(${PROJECT_NAME} PUBLIC ${VTK_LIBRARIES})
 # PCL
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC ${PCL_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${PCL_LIBRARIES})

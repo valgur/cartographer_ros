@@ -21,12 +21,16 @@
 #include "cartographer/io/proto_stream.h"
 #include "cartographer/mapping/pose_graph.h"
 #include "cartographer_ros/msg_conversion.h"
+#include "cartographer_ros/time_conversion.h"
 #include "cartographer_ros_msgs/StatusCode.h"
 #include "cartographer_ros_msgs/StatusResponse.h"
+#include "cartographer/mapping/proto/serialization.pb.h"
+#include "cartographer/mapping/proto/local_slam_range_data.pb.h"
+#include <fstream>
 
 namespace cartographer_ros {
 namespace {
-
+static constexpr int kSerializationFormatVersion = 1;
 using ::cartographer::transform::Rigid3d;
 
 constexpr double kTrajectoryLineStripMarkerScale = 0.07;
@@ -163,6 +167,39 @@ bool MapBuilderBridge::SerializeState(const std::string& filename) {
   return writer.Close();
 }
 
+bool MapBuilderBridge::SerializeRangeData(const std::string& filename){
+  cartographer::io::ProtoStreamWriter writer(filename);
+  // header
+  cartographer::mapping::proto::SerializationHeader header;
+  header.set_format_version(kSerializationFormatVersion);
+  writer.WriteProto(header);
+  const auto& traj_states = GetTrajectoryStates();
+  for(const auto& i_traj: range_data_local_all_){
+    const auto& trajectory_id = i_traj.first; 
+    const auto& local_slam_data = i_traj.second;
+    
+    cartographer::mapping::proto::NodeRangeData node_range_data_pb;
+    node_range_data_pb.set_trajectory_id(trajectory_id);
+
+    // range data coordinates in local frame
+    for(const auto& node_data: local_slam_data){
+      cartographer::sensor::proto::RangeData range_pb =
+        cartographer::sensor::ToProto(node_data.range_data_in_local);
+      *node_range_data_pb.mutable_range_data_in_local() = range_pb;
+      cartographer::transform::proto::Rigid3d local_pose_pb 
+        = cartographer::transform::ToProto(node_data.local_pose);
+      *node_range_data_pb.mutable_local_pose() = local_pose_pb;
+      node_range_data_pb.set_timestamp(
+        cartographer::common::ToUniversal(node_data.time));
+      writer.WriteProto(node_range_data_pb);
+    }
+    // auto* traj_ptr = all_range_data_pb.add_trajectory_range_data();
+    // *traj_ptr = traj_range_data_pb;    
+  }
+  LOG(INFO)<<"Finish writing range data.";
+  return writer.Close();
+}
+
 void MapBuilderBridge::HandleSubmapQuery(
     cartographer_ros_msgs::SubmapQuery::Request& request,
     cartographer_ros_msgs::SubmapQuery::Response& response) {
@@ -248,6 +285,66 @@ MapBuilderBridge::GetTrajectoryStates() {
         trajectory_options_[trajectory_id]};
   }
   return trajectory_states;
+}
+
+//Currently, we just have one trajectory, simple implementation for experiment. 
+nav_msgs::Path MapBuilderBridge::GetTrajectory(){
+  const auto node_poses = map_builder_->pose_graph()->GetTrajectoryNodePoses();
+  nav_msgs::Path result;
+  result.header.stamp = ::ros::Time::now();
+  result.header.frame_id = node_options_.map_frame;
+  ::geometry_msgs::PoseStamped stp_pose;
+  stp_pose.header = result.header;
+  for (const int trajectory_id : node_poses.trajectory_ids()) {
+    for (const auto& node_id_data : node_poses.trajectory(trajectory_id)) {
+      const ::geometry_msgs::Pose node_pose =
+          ToGeometryMsgPose(node_id_data.data.global_pose);
+      stp_pose.pose = node_pose;
+      result.poses.push_back(stp_pose);
+    }
+    break;
+  }
+  return result;
+}
+
+bool MapBuilderBridge::WriteTrajectoryForDLIO(const std::string& save_file_path){
+  const auto node_poses = map_builder_->pose_graph()->GetTrajectoryNodes();
+  std::ofstream ofs(save_file_path);
+  if(!ofs){
+    LOG(ERROR)<<"Open "<<save_file_path<<" failed!";
+    return false;
+  }
+  uint32_t seq = 0;
+  ofs << "\%time,field.header.seq,field.header.stamp,field.pose.position.x,field.pose.position.y,field.pose.position.z,field.pose.orientation.x,field.pose.orientation.y,field.pose.orientation.z,field.pose.orientation.w\n";
+  for (const int trajectory_id : node_poses.trajectory_ids()) {
+    for (const auto& node_id_data : node_poses.trajectory(trajectory_id)) {
+      const auto& node_pose = node_id_data.data.global_pose;
+      cartographer::common::Time time = node_id_data.data.time();
+      // auto t64 = cartographer::common::ToUniversal(time);
+      ros::Time stamp = cartographer_ros::ToRos(time); 
+      int64_t uts_timestamp = ::cartographer::common::ToUniversal(time);
+      int64_t ns_since_unix_epoch =
+          (uts_timestamp -
+          ::cartographer::common::kUtsEpochOffsetFromUnixEpochInSeconds *
+              10000000ll) *
+          100ll;     
+      //TODO(wz): make sure seq is not usded in alignment.
+      ofs << ns_since_unix_epoch <<"," << seq++ 
+          << "," << ns_since_unix_epoch << ","
+          << node_pose.translation().x() << ","
+          << node_pose.translation().y() << ","
+          << node_pose.translation().z() << ","
+          << node_pose.rotation().x() << ","
+          << node_pose.rotation().y() << ","
+          << node_pose.rotation().z() << ","
+          << node_pose.rotation().w() << "\n";
+    }
+    break; 
+  }
+  
+  ofs.close();
+  LOG(INFO)<<"Saved trajectory nodes to "<<save_file_path;
+  return true;
 }
 
 visualization_msgs::MarkerArray MapBuilderBridge::GetTrajectoryNodeList() {
@@ -503,6 +600,10 @@ void MapBuilderBridge::OnLocalSlamResult(
                                          std::move(range_data_in_local)});
   cartographer::common::MutexLocker lock(&mutex_);
   trajectory_state_data_[trajectory_id] = std::move(local_slam_data);
+  if(cache_data_for_visualize_){
+    range_data_local_all_[trajectory_id].push_back(
+      *trajectory_state_data_[trajectory_id]);
+  }
 }
 
 }  // namespace cartographer_ros

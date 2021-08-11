@@ -31,10 +31,12 @@ namespace cartographer_ros {
 struct NodeOptions {
   ::cartographer::mapping::proto::MapBuilderOptions map_builder_options;
   std::string map_frame;
+  std::string sensor_type;
   double lookup_transform_timeout_sec;
   double submap_publish_period_sec;
   double pose_publish_period_sec;
   double trajectory_publish_period_sec;
+  double full_map_cloud_publish_period_sec;
 };
 
 NodeOptions CreateNodeOptions(
