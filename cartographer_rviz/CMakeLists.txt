@@ -36,7 +36,6 @@ google_initialize_cartographer_project()
 
 find_package(Eigen3 REQUIRED)
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
-find_package(VTK REQUIRED)
 
 catkin_package(
   CATKIN_DEPENDS
@@ -77,9 +76,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC ${EIGEN3_LIBRARIES})
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${Boost_INCLUDE_DIRS}")
 target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES})
-
-# VTK
-target_link_libraries(${PROJECT_NAME} PUBLIC ${VTK_LIBRARIES})
 
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC ${catkin_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${catkin_LIBRARIES})
